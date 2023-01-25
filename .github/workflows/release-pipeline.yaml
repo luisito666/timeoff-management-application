@@ -1,0 +1,65 @@
+name: pipeline
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    env:
+      ECR_REPO: timeoff-registry
+    environment: default
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      - name: Login to Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v1
+        with:
+          registry: ${{ steps.login-ecr.outputs.registry }}
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v3
+        with:
+          images: ${{ steps.login-ecr.outputs.registry }}/balkanid/pipeline
+          # generate Docker tags based on the following events/attributes
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix=,format=long
+      - name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+      - name: Branch Name
+        id: get_latest_tag
+        run: echo ::set-output name=BRANCH_NAME::$(echo "${GITHUB_REF/refs\/heads\//}")
+      - name: Tag repo latest-tag
+        uses: EndBug/latest-tag@latest
+        with:
+          tag-name: ${{ steps.get_latest_tag.outputs.BRANCH_NAME }}-pipeline
