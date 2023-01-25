@@ -37,7 +37,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v3
         with:
-          images: ${{ steps.login-ecr.outputs.registry }}/balkanid/pipeline
+          images: ${{ steps.login-ecr.outputs.registry }}/timeoff-registry
           # generate Docker tags based on the following events/attributes
           tags: |
             type=schedule
